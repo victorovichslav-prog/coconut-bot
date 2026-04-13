@@ -5,7 +5,7 @@ const TelegramBot = require('node-telegram-bot-api');
 // ---------- ТВОИ НАСТРОЙКИ (ЗАМЕНИ, ЕСЛИ НАДО) ----------
 const SUPABASE_URL = 'https://owoksgyuvgvdhqrqnuwf.supabase.co';
 const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93b2tzZ3l1dmd2ZGhxcnFudXdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDQ5MTQsImV4cCI6MjA5MTY4MDkxNH0.zhZWb041DDu7IH3_9_FC4cCqYerWz_NXUil5o1jvnVg'; // ← обязательно service_role
-const TELEGRAM_BOT_TOKEN = 'токен_бота';
+const TELEGRAM_BOT_TOKEN = '8595671244:AAG99X4AejQXZ5nk_n_0odfsd9kQGAI7Ah8';
 const OWNER_CHAT_ID = 6971795823; // твой ID в Telegram
 
 const app = express();
