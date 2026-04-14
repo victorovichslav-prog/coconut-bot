@@ -2,11 +2,10 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const TelegramBot = require('node-telegram-bot-api');
 
-// ---------- ТВОИ НАСТРОЙКИ (ЗАМЕНИ, ЕСЛИ НАДО) ----------
 const SUPABASE_URL = 'https://owoksgyuvgvdhqrqnuwf.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93b2tzZ3l1dmd2ZGhxcnFudXdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDQ5MTQsImV4cCI6MjA5MTY4MDkxNH0.zhZWb041DDu7IH3_9_FC4cCqYerWz_NXUil5o1jvnVg'; // ← обязательно service_role
-const TELEGRAM_BOT_TOKEN = '8595671244:AAG99X4AejQXZ5nk_n_0odfsd9kQGAI7Ah8';
-const OWNER_CHAT_ID = 6971795823; // твой ID в Telegram
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const OWNER_CHAT_ID = process.env.OWNER_CHAT_ID || 6971795823;
 
 const app = express();
 app.use(express.json());
@@ -14,102 +13,89 @@ app.use(express.json());
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-// 🔔 Webhook от Supabase (новый заказ)
+console.log('Бот запущен');
+
+// Webhook: новый заказ
 app.post('/new-order', async (req, res) => {
-  const { record } = req.body;
-  if (!record) return res.sendStatus(400);
-
-  const { id, description, tariff, user_id } = record;
-  const { data: user } = await supabase
-    .from('users')
-    .select('name')
-    .eq('id', user_id)
-    .single();
-  const userName = user?.name || 'Гость';
-
-  const tariffText =
-    tariff === 25 ? 'до 3 кг · 25₽' : tariff === 50 ? '3–5 кг · 50₽' : '5+ кг · 100₽';
-
-  const message = `🥥 *НОВЫЙ ЗАКАЗ!*\n👤 *${userName}*\n📦 ${description}\n⚖️ ${tariffText}`;
-
-  await bot.sendMessage(OWNER_CHAT_ID, message, {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '✅ Принять', callback_data: `accept_${id}` },
-          { text: '❌ Отклонить', callback_data: `reject_${id}` }
-        ],
-        [{ text: '💬 Ответить в чат', callback_data: `ask_${id}` }]
-      ]
-    }
-  });
-
-  res.sendStatus(200);
+  try {
+    const { record } = req.body;
+    if (!record) return res.sendStatus(400);
+    const { id, description, tariff, user_id } = record;
+    const { data: user } = await supabase.from('users').select('name').eq('id', user_id).single();
+    const userName = user?.name || 'Гость';
+    const tariffText = tariff === 25 ? 'до 3 кг · 25₽' : tariff === 50 ? '3–5 кг · 50₽' : '5+ кг · 100₽';
+    const message = `🥥 *НОВЫЙ ЗАКАЗ!*\n👤 *${userName}*\n📦 ${description}\n⚖️ ${tariffText}`;
+    await bot.sendMessage(OWNER_CHAT_ID, message, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '✅ Принять', callback_data: `accept_${id}` }, { text: '❌ Отклонить', callback_data: `reject_${id}` }],
+          [{ text: '💬 Ответить', callback_data: `ask_${id}` }]
+        ]
+      }
+    });
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(e);
+    res.sendStatus(500);
+  }
 });
 
-// 🎯 Обработка нажатий на кнопки
+// Webhook: новое сообщение от пользователя
+app.post('/new-message', async (req, res) => {
+  try {
+    const { record } = req.body;
+    if (!record) return res.sendStatus(400);
+    const { order_id, sender_type, text } = record;
+    if (sender_type === 'user') {
+      const { data: order } = await supabase.from('orders').select('description').eq('id', order_id).single();
+      const shortDesc = order?.description?.substring(0, 30) || 'заказ';
+      await bot.sendMessage(OWNER_CHAT_ID, `💬 *Новое сообщение в чате*\n📦 ${shortDesc}...\n_${text}_`, { parse_mode: 'Markdown' });
+    }
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(e);
+    res.sendStatus(500);
+  }
+});
+
+// Кнопки
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
-  const orderId = data.split('_').slice(1).join('_'); // на случай, если id с подчёркиваниями
-
+  const orderId = data.split('_').slice(1).join('_');
   try {
     if (data.startsWith('accept')) {
       await supabase.from('orders').update({ status: 'accepted' }).eq('id', orderId);
-      await supabase.from('messages').insert({
-        order_id: orderId,
-        sender_type: 'owner',
-        text: '✅ Заказ принят! Ожидайте.'
-      });
-      await bot.answerCallbackQuery(query.id, { text: '✅ Заказ принят!' });
-      await bot.sendMessage(chatId, `✅ Статус заказа обновлён: ПРИНЯТ.`);
+      await supabase.from('messages').insert({ order_id: orderId, sender_type: 'owner', text: '✅ Заказ принят!' });
+      await bot.answerCallbackQuery(query.id, { text: 'Принято' });
+      await bot.sendMessage(chatId, `✅ Заказ принят`);
     } else if (data.startsWith('reject')) {
       await supabase.from('orders').update({ status: 'rejected' }).eq('id', orderId);
-      await supabase.from('messages').insert({
-        order_id: orderId,
-        sender_type: 'owner',
-        text: '❌ Заказ отклонён. Свяжитесь для уточнения.'
-      });
-      await bot.answerCallbackQuery(query.id, { text: '❌ Заказ отклонён' });
-      await bot.sendMessage(chatId, `❌ Статус заказа обновлён: ОТКЛОНЁН.`);
+      await supabase.from('messages').insert({ order_id: orderId, sender_type: 'owner', text: '❌ Заказ отклонён' });
+      await bot.answerCallbackQuery(query.id, { text: 'Отклонено' });
+      await bot.sendMessage(chatId, `❌ Заказ отклонён`);
     } else if (data.startsWith('ask')) {
-      // Запоминаем order_id в сессии пользователя (простейший вариант – через ожидание ответа)
-      bot.sendMessage(chatId, `💬 Введите ответ для заказа *${orderId.slice(0, 8)}*:\n(просто напишите сообщение следующим)`, {
-        parse_mode: 'Markdown'
-      });
-      // Сохраняем временно в памяти (в реальном проекте лучше в базе)
+      bot.sendMessage(chatId, `Напишите ответ для заказа *${orderId.slice(0,8)}*`, { parse_mode: 'Markdown' });
       userSessions[chatId] = { awaitingReplyFor: orderId };
+      await bot.answerCallbackQuery(query.id);
     }
-    await bot.answerCallbackQuery(query.id);
-  } catch (err) {
-    console.error(err);
-    await bot.answerCallbackQuery(query.id, { text: '⚠️ Ошибка сервера' });
+  } catch (e) {
+    console.error(e);
+    await bot.answerCallbackQuery(query.id, { text: 'Ошибка' });
   }
 });
 
-// Временное хранилище сессий (для ответа в чат)
 const userSessions = {};
-
-// 💬 Ответ владельца на заказ (после нажатия "Ответить в чат")
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
-
-  // Если ждём ответа на заказ
-  if (userSessions[chatId] && userSessions[chatId].awaitingReplyFor) {
+  if (userSessions[chatId]?.awaitingReplyFor) {
     const orderId = userSessions[chatId].awaitingReplyFor;
     delete userSessions[chatId];
-
-    if (!text) return bot.sendMessage(chatId, '❌ Пустое сообщение.');
-
-    await supabase.from('messages').insert({
-      order_id: orderId,
-      sender_type: 'owner',
-      text: text
-    });
-    bot.sendMessage(chatId, `✅ Ответ отправлен в чат заказа.`);
+    await supabase.from('messages').insert({ order_id: orderId, sender_type: 'owner', text });
+    bot.sendMessage(chatId, `✅ Ответ отправлен в чат`);
   }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log('🚀 Бот работает'));
+app.listen(process.env.PORT || 3000, () => console.log('Server running'));
