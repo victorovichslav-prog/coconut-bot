@@ -42,6 +42,7 @@ app.post('/new-order', async (req, res) => {
 });
 
 // Webhook: новое сообщение от пользователя
+// Webhook: новое сообщение от пользователя
 app.post('/new-message', async (req, res) => {
   try {
     const { record } = req.body;
@@ -50,7 +51,19 @@ app.post('/new-message', async (req, res) => {
     if (sender_type === 'user') {
       const { data: order } = await supabase.from('orders').select('description').eq('id', order_id).single();
       const shortDesc = order?.description?.substring(0, 30) || 'заказ';
-      await bot.sendMessage(OWNER_CHAT_ID, `💬 *Новое сообщение в чате*\n📦 ${shortDesc}...\n_${text}_`, { parse_mode: 'Markdown' });
+      
+      // Отправляем уведомление владельцу С КНОПКОЙ "Ответить"
+      await bot.sendMessage(OWNER_CHAT_ID, 
+        `💬 *Новое сообщение в чате*\n📦 ${shortDesc}...\n\n_${text}_`, 
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '💬 Ответить', callback_data: `ask_${order_id}` }]
+            ]
+          }
+        }
+      );
     }
     res.sendStatus(200);
   } catch (e) {
