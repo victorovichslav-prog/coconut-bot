@@ -152,31 +152,68 @@ bot.onText(/\/test/, (msg) => {
     `Вы владелец? ${isOwner ? 'Да' : 'Нет'}`
   );
 });
+// ========== БЛОКИРОВКА ПОЛЬЗОВАТЕЛЕЙ (С ЗАЩИТОЙ ОТ ОШИБОК) ==========
+
 bot.onText(/\/ban (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
-  if (chatId !== OWNER_CHAT_ID) return;
+  if (chatId != OWNER_CHAT_ID) return;
   const userName = match[1].trim();
-  const { data: exist } = await supabase.from('blocked_users').select('id').eq('user_name', userName).maybeSingle();
-  if (exist) return bot.sendMessage(chatId, `⚠️ "${userName}" уже заблокирован.`);
-  await supabase.from('blocked_users').insert({ user_name: userName });
-  bot.sendMessage(chatId, `🔒 "${userName}" заблокирован.`);
+  try {
+    const { data: exist, error: existErr } = await supabase
+      .from('blocked_users')
+      .select('id')
+      .eq('user_name', userName)
+      .maybeSingle();
+    if (existErr) throw existErr;
+    if (exist) {
+      return bot.sendMessage(chatId, `⚠️ "${userName}" уже заблокирован.`);
+    }
+    const { error: insertErr } = await supabase
+      .from('blocked_users')
+      .insert({ user_name: userName });
+    if (insertErr) throw insertErr;
+    bot.sendMessage(chatId, `🔒 "${userName}" заблокирован.`);
+  } catch (e) {
+    console.error('/ban error:', e);
+    bot.sendMessage(chatId, `❌ Ошибка при блокировке: ${e.message}`);
+  }
 });
 
 bot.onText(/\/unban (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
-  if (chatId !== OWNER_CHAT_ID) return;
+  if (chatId != OWNER_CHAT_ID) return;
   const userName = match[1].trim();
-  await supabase.from('blocked_users').delete().eq('user_name', userName);
-  bot.sendMessage(chatId, `🔓 "${userName}" разблокирован.`);
+  try {
+    const { error } = await supabase
+      .from('blocked_users')
+      .delete()
+      .eq('user_name', userName);
+    if (error) throw error;
+    bot.sendMessage(chatId, `🔓 "${userName}" разблокирован.`);
+  } catch (e) {
+    console.error('/unban error:', e);
+    bot.sendMessage(chatId, `❌ Ошибка при разблокировке: ${e.message}`);
+  }
 });
 
 bot.onText(/\/blocklist/, async (msg) => {
   const chatId = msg.chat.id;
-  if (chatId !== OWNER_CHAT_ID) return;
-  const { data } = await supabase.from('blocked_users').select('user_name').order('blocked_at', { ascending: false });
-  if (!data?.length) return bot.sendMessage(chatId, '📭 Список пуст.');
-  let list = '🚫 *Заблокированные:*\n';
-  data.forEach((u, i) => list += `${i+1}. ${u.user_name}\n`);
-  bot.sendMessage(chatId, list, { parse_mode: 'Markdown' });
+  if (chatId != OWNER_CHAT_ID) return;
+  try {
+    const { data, error } = await supabase
+      .from('blocked_users')
+      .select('user_name')
+      .order('blocked_at', { ascending: false });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      return bot.sendMessage(chatId, '📭 Список заблокированных пуст.');
+    }
+    let list = '🚫 *Заблокированные:*\n';
+    data.forEach((u, i) => list += `${i+1}. ${u.user_name}\n`);
+    bot.sendMessage(chatId, list, { parse_mode: 'Markdown' });
+  } catch (e) {
+    console.error('/blocklist error:', e);
+    bot.sendMessage(chatId, `❌ Ошибка получения списка: ${e.message}`);
+  }
 });
 app.listen(process.env.PORT || 3000, () => console.log('Server running'));
