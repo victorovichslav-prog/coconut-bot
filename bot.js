@@ -131,7 +131,6 @@ bot.onText(/\/unban (.+)/, async (msg, match) => {
   await supabase.from('blocked_users').delete().eq('user_name', userName);
   bot.sendMessage(chatId, `🔓 "${userName}" разблокирован.`);
 });
-
 // /blocklist
 bot.onText(/\/blocklist/, async (msg) => {
   const chatId = msg.chat.id;
