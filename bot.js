@@ -110,5 +110,37 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, `✅ Ответ отправлен в чат`);
   }
 });
+// ========== БЛОКИРОВКА ПОЛЬЗОВАТЕЛЕЙ ==========
+
+// /ban Имя
+bot.onText(/\/ban (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  if (chatId !== OWNER_CHAT_ID) return;
+  const userName = match[1].trim();
+  const { data: exist } = await supabase.from('blocked_users').select('id').eq('user_name', userName).maybeSingle();
+  if (exist) return bot.sendMessage(chatId, `⚠️ "${userName}" уже заблокирован.`);
+  await supabase.from('blocked_users').insert({ user_name: userName });
+  bot.sendMessage(chatId, `🔒 "${userName}" заблокирован.`);
+});
+
+// /unban Имя
+bot.onText(/\/unban (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  if (chatId !== OWNER_CHAT_ID) return;
+  const userName = match[1].trim();
+  await supabase.from('blocked_users').delete().eq('user_name', userName);
+  bot.sendMessage(chatId, `🔓 "${userName}" разблокирован.`);
+});
+
+// /blocklist
+bot.onText(/\/blocklist/, async (msg) => {
+  const chatId = msg.chat.id;
+  if (chatId !== OWNER_CHAT_ID) return;
+  const { data } = await supabase.from('blocked_users').select('user_name, blocked_at').order('blocked_at', { ascending: false });
+  if (!data?.length) return bot.sendMessage(chatId, '📭 Список пуст.');
+  let text = '🚫 *Заблокированные:*\n';
+  data.forEach((u, i) => text += `${i+1}. ${u.user_name}\n`);
+  bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+});
 
 app.listen(process.env.PORT || 3000, () => console.log('Server running'));
