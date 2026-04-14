@@ -143,9 +143,15 @@ bot.onText(/\/blocklist/, async (msg) => {
 });
 // ========== КОМАНДЫ ==========
 bot.onText(/\/test/, (msg) => {
-  bot.sendMessage(msg.chat.id, '✅ Бот работает! Ваш ID: ' + msg.chat.id);
+  const actualOwner = process.env.OWNER_CHAT_ID || OWNER_CHAT_ID;
+  const isOwner = (msg.chat.id == actualOwner);
+  bot.sendMessage(msg.chat.id, 
+    `✅ Бот работает!\n` +
+    `Ваш ID: ${msg.chat.id}\n` +
+    `OWNER_CHAT_ID: ${actualOwner}\n` +
+    `Вы владелец? ${isOwner ? 'Да' : 'Нет'}`
+  );
 });
-
 bot.onText(/\/ban (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   if (chatId !== OWNER_CHAT_ID) return;
